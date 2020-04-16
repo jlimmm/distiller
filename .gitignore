@@ -1,3 +1,7 @@
+# Jieun
+*.swp
+cifar-10-batches-py/
+
 # Runs / tests collaterals
 latest_log_dir
 latest_log_file
