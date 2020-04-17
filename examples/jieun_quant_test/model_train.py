@@ -6,6 +6,9 @@ import torch.nn.functional as F
 
 from distiller.data_loggers import collector_context
 
+num_epoch = 2
+batch_size = 4
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
@@ -38,21 +41,11 @@ def generate_model_info(model, model_name):
 
     return
 
-#####################################
-# Distiller - parallel=True
-#####################################
-from distiller.models import create_model
-import distiller.quantization as quant
-from copy import deepcopy
-
-model= create_model(pretrained=True, dataset='imagenet', arch='resnet18', parallel=True)
-generate_model_info(model, 'dist_parallel')
-
-#print("original : ", model.module.layer1[0].conv1.weight.data[0, 0, :, :])
-print('======================')
 
 
-model.to(device)
+########################################################################
+# 1. Load and normalizing the CIFAR10 training and test datasets using
+# torchvision
 
 import torch
 import torchvision
@@ -62,14 +55,14 @@ transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-batch_size = 4
 
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+path_c10 = '../../../data.cifar10/'
+trainset = torchvision.datasets.CIFAR10(root=path_c10, train=True,
                                         download=True, transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                           shuffle=True, num_workers=2)
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+testset = torchvision.datasets.CIFAR10(root=path_c10, train=False,
                                        download=True, transform=transform)
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                          shuffle=False, num_workers=2)
@@ -98,12 +91,34 @@ imshow(torchvision.utils.make_grid(images))
 # print labels
 print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
 
+########################################################################
+# 2. Define a network
+
+from distiller.models import create_model
+import distiller.quantization as quant
+from copy import deepcopy
+
+model= create_model(pretrained=True, dataset='imagenet', arch='resnet18', parallel=True)
+generate_model_info(model, 'dist_parallel')
+
+model.to(device)
+
+########################################################################
+# 3. Difine a loss function and optimizer
+
 import torch.optim as optim
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
-for epoch in range(2):  # loop over the dataset multiple times
+
+########################################################################
+# 4. Train the network
+
+import time
+start = time.time()
+
+for epoch in range(num_epoch):  # loop over the dataset multiple times
 
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
@@ -123,14 +138,28 @@ for epoch in range(2):  # loop over the dataset multiple times
         # print statistics
         running_loss += loss.item()
         if i % 2000 == 1999:    # print every 2000 mini-batches
-            print('[%d, %5d] loss: %.3f' %
-                  (epoch + 1, i + 1, running_loss / 2000))
+            end = time.time()
+            print('[%d, %5d] loss: %.3f, time:%.1f' %
+                  (epoch + 1, i + 1, running_loss / 2000, end-start))
             running_loss = 0.0
+            start = time.time()
 
 print('Finished Training')
 
 
-generate_yaml(model, 'test_model')
+########################################################################
+# 5. generate stats
+
+distiller.utils.assign_layer_fq_names(model)
+#msglogger.info("Generating quantization calibration stats based on {0} users".format(args.qe_calibration))
+collector = distiller.data_loggers.QuantCalibrationStatsCollector(model)
+with collector_context(collector):
+    # Here call your model evaluation function, making sure to execute only
+    # the portion of the dataset specified by the qe_calibration argument
+    pass
+path_yaml = './stat_yaml/' + model_name + '.yaml'
+collector.save(path_yaml)
+#generate_yaml(model, 'test_model')
 
 #####################################
 # Quantization
