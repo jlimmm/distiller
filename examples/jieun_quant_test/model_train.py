@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from distiller.data_loggers import collector_context
 
-num_epoch = 2
+num_epoch = 1
 batch_size = 4
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -46,6 +46,7 @@ def generate_model_info(model, model_name):
 ########################################################################
 # 1. Load and normalizing the CIFAR10 training and test datasets using
 # torchvision
+########################################################################
 
 import torch
 import torchvision
@@ -93,6 +94,7 @@ print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
 
 ########################################################################
 # 2. Define a network
+########################################################################
 
 from distiller.models import create_model
 import distiller.quantization as quant
@@ -105,6 +107,7 @@ model.to(device)
 
 ########################################################################
 # 3. Difine a loss function and optimizer
+########################################################################
 
 import torch.optim as optim
 
@@ -114,6 +117,7 @@ optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 ########################################################################
 # 4. Train the network
+########################################################################
 
 import time
 start = time.time()
@@ -149,17 +153,23 @@ print('Finished Training')
 
 ########################################################################
 # 5. generate stats
-
-distiller.utils.assign_layer_fq_names(model)
-#msglogger.info("Generating quantization calibration stats based on {0} users".format(args.qe_calibration))
-collector = distiller.data_loggers.QuantCalibrationStatsCollector(model)
-with collector_context(collector):
-    # Here call your model evaluation function, making sure to execute only
-    # the portion of the dataset specified by the qe_calibration argument
-    pass
-path_yaml = './stat_yaml/' + model_name + '.yaml'
-collector.save(path_yaml)
+########################################################################
+model_name = 'test'
+path_yaml = './stat_yaml/' 
+#path_yaml = './stat_yaml/' + model_name + '.yaml'
 #generate_yaml(model, 'test_model')
+
+from engine import evaluate
+
+model_without_ddp = model
+
+# CHECK: /examples/word_language_model/quantize_lstm.ipynb
+def test_fn(model):
+    return evaluate(model, data_loader_test, device=device)
+
+collect_quant_stats(model_without_ddp, test_fn, save_dir=path_yaml) 
+
+
 
 #####################################
 # Quantization
