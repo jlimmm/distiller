@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from distiller.data_loggers import collector_context
 
-num_epoch = 1
+num_epoch = 0
 batch_size = 4
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -100,8 +100,8 @@ from distiller.models import create_model
 import distiller.quantization as quant
 from copy import deepcopy
 
-model= create_model(pretrained=True, dataset='imagenet', arch='resnet18', parallel=True)
-generate_model_info(model, 'dist_parallel')
+model= create_model(pretrained=True, dataset='imagenet', arch='resnet18', parallel=False)
+generate_model_info(model, 'dist_base')
 
 model.to(device)
 
@@ -123,8 +123,9 @@ import time
 start = time.time()
 
 for epoch in range(num_epoch):  # loop over the dataset multiple times
-
+    
     running_loss = 0.0
+    model.train()
     for i, data in enumerate(trainloader, 0):
         # get the inputs
         inputs, labels = data
@@ -147,6 +148,29 @@ for epoch in range(num_epoch):  # loop over the dataset multiple times
                   (epoch + 1, i + 1, running_loss / 2000, end-start))
             running_loss = 0.0
             start = time.time()
+                  
+    val_loss = 0.0
+    correct = 0
+    total = 0
+    model.eval()
+    with torch.no_grad():
+        for inputs, labels in testloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+
+            loss = criterion(outputs, labels)
+            val_loss += loss
+
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+                
+        val_loss /= len(testloader) 
+        
+        print('\t val_loss: %.3f, acc:%.2f%%' %
+                (val_loss, 100. * correct / total))
+
+    
 
 print('Finished Training')
 
@@ -154,21 +178,43 @@ print('Finished Training')
 ########################################################################
 # 5. generate stats
 ########################################################################
-model_name = 'test'
+model_name = 'acts_quantization_stats.yaml'
 path_yaml = './stat_yaml/' 
 #path_yaml = './stat_yaml/' + model_name + '.yaml'
 #generate_yaml(model, 'test_model')
 
-from engine import evaluate
-
-model_without_ddp = model
-
 # CHECK: /examples/word_language_model/quantize_lstm.ipynb
+def evaluate(model):
+    val_loss = 0.0
+    correct = 0
+    total = 0
+    model.eval()
+    with torch.no_grad():
+        for inputs, labels in testloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+
+            loss = criterion(outputs, labels)
+            val_loss += loss
+
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+                
+        val_loss /= len(testloader) 
+    
+    eval_acc = 100 * correct / total
+    
+    return val_loss, eval_acc
+
+eval_loss, eval_acc = evaluate(model)
+print('[eval] loss:%.3f, acc:%.2f%%' % (eval_loss, eval_acc))
+
 def test_fn(model):
-    return evaluate(model, data_loader_test, device=device)
-
-collect_quant_stats(model_without_ddp, test_fn, save_dir=path_yaml) 
-
+    return evaluate(model)[0]
+        
+from distiller.data_loggers import collect_quant_stats
+collect_quant_stats(model, test_fn, save_dir=path_yaml) 
 
 
 #####################################
@@ -177,7 +223,7 @@ collect_quant_stats(model_without_ddp, test_fn, save_dir=path_yaml)
 #model = model_not_parallel
 
 quant_mode = {'activations': 'ASYMMETRIC_UNSIGNED', 'weights': 'SYMMETRIC'}
-stats_file = "./stat_yaml/test_model.yaml"
+stats_file = path_yaml + model_name 
 #stats_file = "../quantization/post_train_quant/stats/resnet18_quant_stats.yaml"
 dummy_input = distiller.get_dummy_input(input_shape=model.input_shape)
 
@@ -185,12 +231,80 @@ quantizer = quant.PostTrainLinearQuantizer(
     deepcopy(model), bits_activations=8, bits_parameters=8, mode=quant_mode,
     model_activation_stats=stats_file, overrides=None
 )
-temp = quantizer.prepare_model(dummy_input)
+quantizer.prepare_model(dummy_input)
 
 pyt_model = quantizer.convert_to_pytorch(dummy_input)
 generate_model_info(pyt_model, 'after_quant')
 
+print('Distiller model device:', distiller.model_device(quantizer.model))
+print('PyTorch model device:', distiller.model_device(pyt_model))
+
 print(pyt_model.layer1[0].conv1.weight().int_repr().data[0, 0, :, :])
 print(pyt_model.layer1[0].conv1.weight().dequantize().data[0, 0, :, :])
+
+#eval_loss, eval_acc = evaluate(pyt_model)
+#print('[eval] loss:%.3f, acc:%.2f%%' % (eval_loss, eval_acc))
+
+
+print('DISTILLER1:\n{}\n'.format(quantizer.model.conv1))
+#print('DISTILLER2:\n{}\n'.format(quantizer.model.module.conv1))
+print('PyTorch:\n{}\n'.format(pyt_model.conv1))
+
+print('layer1.0.conv1')
+print(pyt_model.layer1[0].conv1)
+print('\nlayer1.0.add')
+print(pyt_model.layer1[0].add)
+
+import torchnet as tnt
+
+def eval_model(data_loader, model, device, print_freq=10):
+    print('Evaluating model')
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+
+    loss = tnt.meter.AverageValueMeter()
+    classerr = tnt.meter.ClassErrorMeter(accuracy=True, topk=(1, 5))
+
+    total_samples = len(data_loader.sampler)
+    batch_size = data_loader.batch_size
+    total_steps = math.ceil(total_samples / batch_size)
+    print('{0} samples ({1} per mini-batch)'.format(total_samples, batch_size))
+
+    # Switch to evaluation mode
+    model.eval()
+
+    for step, (inputs, target) in enumerate(data_loader):
+        with torch.no_grad():
+            inputs, target = inputs.to(device), target.to(device)
+            # compute output from model
+            output = model(inputs)
+
+            # compute loss and measure accuracy
+            loss.add(criterion(output, target).item())
+            classerr.add(output.data, target)
+
+            if (step + 1) % print_freq == 0:
+                print('[{:3d}/{:3d}] Top1: {:.3f}  Top5: {:.3f}  Loss: {:.3f}'.format(
+                      step + 1, total_steps, classerr.value(1), classerr.value(5), loss.mean), flush=True)
+    print('----------')
+    print('Overall ==> Top1: {:.3f}  Top5: {:.3f}  Loss: {:.3f}'.format(
+        classerr.value(1), classerr.value(5), loss.mean), flush=True)
+
+    return
+
+#if torch.cuda.is_available():
+#    eval_model(test_loader_gpu, quantizer.model, 'cuda')
+
+if torch.cuda.is_available():
+    print('Creating CPU copy of Distiller model')
+    cpu_model = distiller.make_non_parallel_copy(quantizer.model).cpu()
+else:
+    cpu_model = quantizer.model
+eval_model(test_loader_cpu, cpu_model, 'cpu', print_freq=60)
+
+
+eval_model(test_loader_cpu, pyt_model, 'cpu', print_freq=60)
+
+if torch.cuda.is_available():
+    eval_model(test_loader_gpu, quantizer.model, 'cuda')
 
 

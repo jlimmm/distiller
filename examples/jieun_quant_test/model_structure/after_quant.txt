@@ -1,0 +1,124 @@
+ResNet(
+  (conv1): ConditionalQuantizeWrapper(
+    (quant): ConditionalQuantize(
+      (quantizers): ModuleDict(
+        (0): Quantize(scale=tensor([0.0157]), zero_point=tensor([64]), dtype=torch.quint8)
+      )
+    )
+    (wrapped): QuantizedConvReLU2d(3, 64, kernel_size=(7, 7), stride=(2, 2), scale=0.023638255894184113, zero_point=0, padding=(3, 3))
+  )
+  (bn1): Identity()
+  (relu): Identity()
+  (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+  (layer1): Sequential(
+    (0): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(64, 64, kernel_size=(3, 3), stride=(1, 1), scale=0.014685485512018204, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), scale=0.04509738087654114, zero_point=58, padding=(1, 1))
+      (bn2): Identity()
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+    (1): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(64, 64, kernel_size=(3, 3), stride=(1, 1), scale=0.019399797543883324, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), scale=0.07995066791772842, zero_point=64, padding=(1, 1))
+      (bn2): Identity()
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+  )
+  (layer2): Sequential(
+    (0): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(64, 128, kernel_size=(3, 3), stride=(2, 2), scale=0.020472317934036255, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), scale=0.05967767909169197, zero_point=54, padding=(1, 1))
+      (bn2): Identity()
+      (downsample): Sequential(
+        (0): QuantizedConv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), scale=0.056803349405527115, zero_point=65)
+        (1): Identity()
+      )
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+    (1): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(128, 128, kernel_size=(3, 3), stride=(1, 1), scale=0.022156717255711555, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), scale=0.05974201858043671, zero_point=64, padding=(1, 1))
+      (bn2): Identity()
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+  )
+  (layer3): Sequential(
+    (0): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(128, 256, kernel_size=(3, 3), stride=(2, 2), scale=0.02572319284081459, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), scale=0.062141526490449905, zero_point=60, padding=(1, 1))
+      (bn2): Identity()
+      (downsample): Sequential(
+        (0): QuantizedConv2d(128, 256, kernel_size=(1, 1), stride=(2, 2), scale=0.022826574742794037, zero_point=78)
+        (1): Identity()
+      )
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+    (1): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(256, 256, kernel_size=(3, 3), stride=(1, 1), scale=0.020413881167769432, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), scale=0.052107371389865875, zero_point=69, padding=(1, 1))
+      (bn2): Identity()
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+  )
+  (layer4): Sequential(
+    (0): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(256, 512, kernel_size=(3, 3), stride=(2, 2), scale=0.020860761404037476, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), scale=0.0642545148730278, zero_point=55, padding=(1, 1))
+      (bn2): Identity()
+      (downsample): Sequential(
+        (0): QuantizedConv2d(256, 512, kernel_size=(1, 1), stride=(2, 2), scale=0.0567784383893013, zero_point=57)
+        (1): Identity()
+      )
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+    (1): DistillerBasicBlock(
+      (conv1): QuantizedConvReLU2d(512, 512, kernel_size=(3, 3), stride=(1, 1), scale=0.014829645864665508, zero_point=0, padding=(1, 1))
+      (bn1): Identity()
+      (relu1): Identity()
+      (conv2): QuantizedConv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), scale=0.07132107019424438, zero_point=41, padding=(1, 1))
+      (bn2): Identity()
+      (add): QFunctionalAddRelu(
+        (qfunc): QFunctional()
+      )
+      (relu2): Identity()
+    )
+  )
+  (avgpool): AdaptiveAvgPool2d(output_size=(1, 1))
+  (fc): QuantizedLinear(in_features=512, out_features=1000, scale=0.1985711306333542, zero_point=42)
+  (output_dequant): DeQuantize()
+)
